@@ -1,0 +1,6 @@
+{
+  "jellyfin_stable": "12.4",
+  "jellyfin_test": "2026111613",
+  "emby_stable": "4.10.2.0",
+  "emby_test": "4.11.0.13"
+}
