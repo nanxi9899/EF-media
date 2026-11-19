@@ -141,7 +141,7 @@ def build(args):
         "maxmin": True,
         "state": False,
         "type": "iframe",
-        "help": f"https://github.com/nanxi9899/fnos-media-fpk",
+        "help": f"https://github.com/nanxi9899/EF-media",
         "version": version,
         "recommend": False,
         "beta": args.beta,
