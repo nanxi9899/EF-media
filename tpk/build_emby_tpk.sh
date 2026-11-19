@@ -25,7 +25,7 @@ cat > "$D/config.ini" <<EOF
   "resize": true,
   "state": false,
   "type": "iframe",
-  "help": "https://github.com/nanxi9899/fnos-media-fpk",
+  "help": "https://github.com/nanxi9899/EF-media",
   "version": "$VERSION",
   "recommend": false,
   "relation": ["", ""],
