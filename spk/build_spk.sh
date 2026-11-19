@@ -3,6 +3,9 @@
 # 用法: build_spk.sh <app: jellyfin|emby> <version> <src_payload_dir> <port> <out_spk>
 #   src_payload_dir 是已解包好的应用主体，脚本会把它放到 package.tgz 的 program/ 下
 set -e
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+WORKDIR="${WORKDIR:-/tmp/fnos-build}"
+mkdir -p "$WORKDIR"
 
 APP="$1"       # jellyfin | emby
 VERSION="$2"
@@ -11,8 +14,7 @@ PORT="$4"
 OUT="$5"
 PROCPATH="${6:-}"   # 进程清理匹配路径（可选），默认 program/<pkg>
 
-ART=/root/.codebuddy/artifact/2f8a7d30-9c21-4f0b-1d77-0a8f8d5eb000
-ICONS=$ART/spk_icons
+ICONS=$REPO_ROOT/assets/icons
 
 case "$APP" in
   jellyfin)
@@ -34,7 +36,7 @@ case "$APP" in
   *) echo "unknown app: $APP"; exit 1;;
 esac
 
-ROOT=$ART/spk_build/${APP}_${VERSION}
+ROOT=$WORKDIR/spk_build/${APP}_${VERSION}
 rm -rf "$ROOT"
 mkdir -p "$ROOT/scripts" "$ROOT/conf" "$ROOT/package"
 PKGDIR="$ROOT/package"

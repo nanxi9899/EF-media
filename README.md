@@ -19,19 +19,32 @@
 
 ```
 .
+├── assets/icons/    # 套件图标（各平台打包时复用）
+├── scripts/
+│   └── build_all.sh       # 统一入口：下载官方二进制→组装payload→打包12个套件
 ├── fpk/          # 飞牛 fnOS 套件（fnpack 官方工具打包）
-│   ├── build_fpk.sh
-│   └── *.fpk
+│   └── build_fpk.sh
 ├── spk/          # 群晖 DSM 7.4 套件
-│   ├── build_spk.sh       # 自研：INFO / scripts / conf / privilege
-│   └── *.spk
+│   └── build_spk.sh       # 自研：INFO / scripts / conf / privilege
 ├── tpk/          # 铁威马 TOS 7.0 套件
 │   ├── build_tpk.py       # 自研：JSON头 + lang + XZ tar 三段式封装
 │   ├── build_emby_tpk.sh
-│   └── *.tpk
-├── .github/workflows/sync-upstream.yml   # 定时检查上游，有新版本就重新打包
+│   └── build_jellyfin_tpk.sh
+├── .github/workflows/sync-upstream.yml   # 定时检查上游，有新版本就云端重新打包并发布
 └── versions.json     # 记录已打包版本，供同步工作流比对
 ```
+
+## 云端自动编译
+
+`.github/workflows/sync-upstream.yml` 实现了完整的「同步上游 → 自动打包 → 发布 Release」流水线：
+
+1. **触发**：每天定时（北京时间 02:00）+ 手动 `workflow_dispatch`。
+2. **探测**：读取 Jellyfin 官方 repo 目录与 Emby Releases API，取最新正式版 / 测试版。
+3. **比对**：与 `versions.json` 对比，无更新则跳过；有更新才构建。
+4. **构建**：`scripts/build_all.sh` 下载官方 x86_64 二进制，解包组装 payload，调用三平台自研脚本产出 12 个套件。
+5. **校验 + 发布**：校验 spk checksum / tpk md5 / 数量（必须 12 个），通过后用内置 `GITHUB_TOKEN` 覆盖发布到 `v1.0` Release，并回写 `versions.json`。
+
+> 首次推送 `.github/workflows/` 下的文件需要带 `workflow` scope 的 classic token；此后工作流运行时用仓库内置的 `GITHUB_TOKEN` 即可发布 Release，无需额外密钥。也可在 Actions 页面手动点「Run workflow」立即触发一次。
 
 ## 打包方式（全部自研脚本，不依赖第三方仓库的成品包）
 

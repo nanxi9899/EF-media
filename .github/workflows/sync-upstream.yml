@@ -1,0 +1,147 @@
+name: 同步上游并自动重新打包
+
+# 每天探测 Jellyfin / Emby 上游最新版本；若有更新则下载官方二进制，
+# 用仓库内自研脚本重新打包 3 平台 × 4 版本 = 12 个套件，并发布到 Release。
+on:
+  schedule:
+    - cron: '0 18 * * *'   # 每天 UTC 18:00 = 北京时间次日 02:00
+  workflow_dispatch:       # 允许手动触发（强制重打包）
+
+permissions:
+  contents: write          # 允许提交 versions.json 与发布 Release asset
+
+concurrency:
+  group: auto-build
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils xz-utils jq curl ca-certificates
+          echo "磁盘空间:"; df -h .
+
+      # ---------- 探测上游最新版本 ----------
+      - name: 探测上游最新版本
+        id: upstream
+        run: |
+          set -euo pipefail
+          # Jellyfin 正式版：目录列表里最新的 x.y.z-amd64.tar.gz
+          JF_STABLE=$(curl -fsSL "https://repo.jellyfin.org/files/server/linux/latest-stable/amd64/" \
+            | grep -oE 'jellyfin_[0-9][0-9.]*-amd64\.tar\.gz' \
+            | sed -E 's/jellyfin_([0-9.]+)-amd64.*/\1/' | sort -Vu | tail -1)
+          # Jellyfin 测试版：unstable 目录，版本号可能是纯数字构建号或含 -rc
+          JF_RAW=$(curl -fsSL "https://repo.jellyfin.org/files/server/linux/latest-unstable/amd64/" \
+            | grep -oE 'jellyfin_[0-9][0-9A-Za-z.]*-amd64\.tar\.gz' \
+            | sed -E 's/jellyfin_([0-9A-Za-z.]+)-amd64.*/\1/' | sort -Vu | tail -1)
+          JF_TEST="${JF_RAW}-unstable"
+          # Emby 正式版 / 测试版
+          EMBY_STABLE=$(curl -fsSL "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases/latest" \
+            | jq -r '.tag_name')
+          EMBY_RAW=$(curl -fsSL --retry 3 "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases?per_page=10" \
+            | jq -r '[.[] | select(.prerelease==true) | .tag_name][0]')
+          EMBY_TEST="${EMBY_RAW}-beta"
+
+          echo "jellyfin_stable=$JF_STABLE"   >> "$GITHUB_OUTPUT"
+          echo "jellyfin_test=$JF_TEST"       >> "$GITHUB_OUTPUT"
+          echo "emby_stable=$EMBY_STABLE"     >> "$GITHUB_OUTPUT"
+          echo "emby_test=$EMBY_TEST"         >> "$GITHUB_OUTPUT"
+          echo "探测结果: JF稳定=$JF_STABLE JF测试=$JF_TEST Emby稳定=$EMBY_STABLE Emby测试=$EMBY_TEST"
+
+      # ---------- 比对版本 ----------
+      - name: 比对版本是否有更新
+        id: decide
+        env:
+          JF_S: ${{ steps.upstream.outputs.jellyfin_stable }}
+          JF_T: ${{ steps.upstream.outputs.jellyfin_test }}
+          EB_S: ${{ steps.upstream.outputs.emby_stable }}
+          EB_T: ${{ steps.upstream.outputs.emby_test }}
+        run: |
+          set -euo pipefail
+          CHANGED=false
+          for pair in "jellyfin_stable:$JF_S" "jellyfin_test:$JF_T" "emby_stable:$EB_S" "emby_test:$EB_T"; do
+            key=${pair%%:*}; val=${pair#*:}
+            old=$(jq -r ".$key // empty" versions.json)
+            echo "$key: 本地=$old 上游=$val"
+            [ -n "$val" ] && [ "$old" != "$val" ] && CHANGED=true
+          done
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "结论: changed=$CHANGED"
+
+      # ---------- 有更新才构建 ----------
+      - name: 写入新版本记录
+        if: steps.decide.outputs.changed == 'true'
+        env:
+          JF_S: ${{ steps.upstream.outputs.jellyfin_stable }}
+          JF_T: ${{ steps.upstream.outputs.jellyfin_test }}
+          EB_S: ${{ steps.upstream.outputs.emby_stable }}
+          EB_T: ${{ steps.upstream.outputs.emby_test }}
+        run: |
+          jq -n --arg js "$JF_S" --arg jt "$JF_T" --arg es "$EB_S" --arg et "$EB_T" \
+            '{jellyfin_stable:$js,jellyfin_test:$jt,emby_stable:$es,emby_test:$et}' > versions.json
+          cat versions.json
+
+      - name: 下载二进制并打包 12 个套件
+        if: steps.decide.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          export WORKDIR="$RUNNER_TEMP/fnos-build"
+          export OUTDIR="$GITHUB_WORKSPACE/dist"
+          mkdir -p "$OUTDIR"
+          bash scripts/build_all.sh versions.json
+          echo "产物清单:"; ls -lh "$OUTDIR"
+
+      - name: 校验产物
+        if: steps.decide.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          n=$(find dist -maxdepth 1 -type f \( -name '*.fpk' -o -name '*.spk' -o -name '*.tpk' \) | wc -l)
+          echo "套件数量: $n"
+          [ "$n" -eq 12 ] || { echo "ERROR: 期望 12 个套件，实际 $n 个"; exit 1; }
+          # spk 的 INFO checksum 必须等于 package.tgz 的 md5
+          for spk in dist/*.spk; do
+            d=$(mktemp -d); tar -xf "$spk" -C "$d"
+            chk=$(grep -E '^checksum=' "$d/INFO" | cut -d'"' -f2)
+            real=$(md5sum "$d/package.tgz" | awk '{print $1}')
+            [ "$chk" = "$real" ] || { echo "ERROR: checksum 不匹配 $spk ($chk != $real)"; exit 1; }
+            rm -rf "$d"
+          done
+          echo "校验通过"
+
+      - name: 发布到 Release（12 个套件）
+        if: steps.decide.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0
+          name: "Jellyfin & Emby 三平台套件（最新正式版+测试版）"
+          body: |
+            自动构建产物：飞牛 fnOS `.fpk` / 群晖 DSM 7.4 `.spk` / 铁威马 TOS 7.0 `.tpk`
+            共 12 个套件（x86_64）。版本见 [versions.json](https://github.com/${{ github.repository }}/blob/main/versions.json)。
+            由 GitHub Actions 在上游更新后自动重新打包发布。
+          files: |
+            dist/*.fpk
+            dist/*.spk
+            dist/*.tpk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 提交版本记录
+        if: steps.decide.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add versions.json
+          git diff --staged --quiet || git commit -m "chore: 同步上游版本 [skip ci]"
+          git push

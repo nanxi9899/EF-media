@@ -2,9 +2,13 @@
 # 自研 FPK 打包脚本（飞牛 fnOS，使用官方 fnpack 工具 + 自写配置）
 # 用法: build_fpk.sh <jellyfin|emby> <version> <payload_dir> <port> <beta> <out.fpk>
 set -e
-ART=/root/.codebuddy/artifact/2f8a7d30-9c21-4f0b-1d77-0a8f8d5eb000
+# 自包含：仓库根目录由脚本位置推导，工作目录 / fnpack 工具可通过环境变量覆盖
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+WORKDIR="${WORKDIR:-/tmp/fnos-build}"
+FNPACK="${FNPACK:-$WORKDIR/fnpack}"
 APP="$1"; VERSION="$2"; PAY="$3"; PORT="$4"; BETA="$5"; OUT="$6"
-ICONS=$ART/spk_icons
+ICONS="$REPO_ROOT/assets/icons"
+mkdir -p "$WORKDIR"
 
 case "$APP" in
   jellyfin)
@@ -20,9 +24,9 @@ case "$APP" in
   *) echo "unknown"; exit 1;;
 esac
 
-ROOT=$ART/fpk_build/${APP}_${VERSION}
+ROOT=$WORKDIR/fpk_build/${APP}_${VERSION}
 rm -rf "$ROOT" && mkdir -p "$ROOT" && cd "$ROOT"
-/workspace/fnpack create "$PKG" >/dev/null 2>&1
+"$FNPACK" create "$PKG" >/dev/null 2>&1
 cd "$PKG"
 
 # manifest
@@ -202,7 +206,7 @@ chmod +x app/jellyfin 2>/dev/null || true
 chmod +x app/system/EmbyServer 2>/dev/null || true
 
 echo "=== building fpk: $PKG $VERSION ==="
-/workspace/fnpack build 2>&1 | tail -5
+"$FNPACK" build 2>&1 | tail -5
 FPK=$(ls *.fpk | head -1)
 mv "$FPK" "$OUT"
 echo "BUILT: $OUT"

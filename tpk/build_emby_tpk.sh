@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
-ART=/root/.codebuddy/artifact/2f8a7d30-9c21-4f0b-1d77-0a8f8d5eb000
-TPKSRC=$ART/tpk_src
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+WORKDIR="${WORKDIR:-/tmp/fnos-build}"
+TPKSRC=$WORKDIR/tpk_src
 ID="$1"; VERSION="$2"; PAY="$3"; OUT="$4"; BETA="$5"
 D=$TPKSRC/$ID
 rm -rf "$D" && mkdir -p "$D/bin/program" "$D/images/icons" "$D/init.d" "$D/functions" "$D/update"
 cp -a "$PAY"/. "$D/bin/program/"
 find "$D" \( -name '.DS_Store' -o -name 'Thumbs.db' \) -delete 2>/dev/null || true
-cp "$ART/spk_icons/emby_256.png" "$D/images/icons/icon.png"
+cp "$REPO_ROOT/assets/icons/emby_256.png" "$D/images/icons/icon.png"
 
 cat > "$D/config.ini" <<EOF
 {
@@ -129,4 +130,4 @@ chmod +x "$D/init.d/service"
 printf '#!/bin/sh\nexit 0\n' > "$D/install"; chmod +x "$D/install"
 mkdir -p "$D/sysroot/usr/local/bin" "$D/sysroot/var/lib" "$D/update"
 
-python3 "$ART/build_tpk.py" --src "$D" --out "$OUT" --app emby --id "$ID" --version "$VERSION" --port 8096 --beta "$BETA"
+python3 "$REPO_ROOT/tpk/build_tpk.py" --src "$D" --out "$OUT" --app emby --id "$ID" --version "$VERSION" --port 8096 --beta "$BETA"
