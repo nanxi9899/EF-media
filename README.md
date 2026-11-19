@@ -1,8 +1,8 @@
-# fnos-media-fpk
+# EF-media
 
 飞牛 fnOS / 群晖 DSM 7.4 / 铁威马 TOS 7.0 三平台媒体服务器套件，x86_64 架构。
 
-> **下载现成套件**：请到 [Releases](https://github.com/nanxi9899/fnos-media-fpk/releases) 页面下载 `.fpk` / `.spk` / `.tpk` 附件（单文件较大，故以 Release 附件形式提供，而非提交进仓库）。云端自动编译工作流见 `.github/workflows/`（需要带 `workflow` scope 的 token 推送）。
+> **下载现成套件**：请到 [Releases](https://github.com/nanxi9899/EF-media/releases) 页面下载 `.fpk` / `.spk` / `.tpk` 附件（单文件较大，故以 Release 附件形式提供，而非提交进仓库）。云端自动编译工作流见 `.github/workflows/`（需要带 `workflow` scope 的 token 推送）。
 
 包含 **Jellyfin** 与 **Emby** 各自的**最新正式版 + 最新测试版**，共 4 个版本 × 3 个平台 = 12 个套件包。
 
