@@ -206,7 +206,13 @@ chmod +x app/jellyfin 2>/dev/null || true
 chmod +x app/system/EmbyServer 2>/dev/null || true
 
 echo "=== building fpk: $PKG $VERSION ==="
-"$FNPACK" build 2>&1 | tail -5
+# fnOS 只接受官方开发者证书签名，本地自签会被判为 Invalid certificate；
+# FNPACK_NOSIGN=1 时跳过签名（侧载安装用，与 fnpack build --nosign 等价）
+if [ "${FNPACK_NOSIGN:-1}" = "1" ]; then
+  "$FNPACK" build --nosign 2>&1 | tail -5
+else
+  "$FNPACK" build 2>&1 | tail -5
+fi
 FPK=$(ls *.fpk | head -1)
 mv "$FPK" "$OUT"
 echo "BUILT: $OUT"
