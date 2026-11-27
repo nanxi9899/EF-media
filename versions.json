@@ -1,6 +1,6 @@
 {
   "jellyfin_stable": "12.4",
-  "jellyfin_test": "2026111613-unstable",
+  "jellyfin_test": "",
   "emby_stable": "4.10.2.0",
   "emby_test": "4.11.0.19-beta"
 }
